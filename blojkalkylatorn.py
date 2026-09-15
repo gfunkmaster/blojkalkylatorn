@@ -12,6 +12,7 @@ Butiker som stöds just nu:
   * Hemköp  – samma JSON-API som Willys (samma koncern, Axfood)
   * Apotea  – parsar serverrenderad HTML (kr/blöja från antal i namnet)
   * Coop    – personaliserings-API (ger pris, antal och jämförpris direkt)
+  * Apoteket – sök-API (ger pris, antal och kampanjpris direkt)
   * ICA     – parsar serverrenderad HTML (kräver val av butik, Playwright för bot-skydd)
 
 Kör exempel (utan kuponger):
@@ -488,6 +489,57 @@ def fetch_apotea(query: str, max_pages: int = 3, fill_jmf: bool = False,
 
 
 # --------------------------------------------------------------------------
+# Apoteket (sök-API bakom en 54proxy-proxy)
+# --------------------------------------------------------------------------
+
+APOTEKET_SEARCH_URL = "https://apoteket-se.54proxy.com/search"
+
+
+def fetch_apoteket(query: str, take: int = 100) -> List[Product]:
+    body = {
+        "query": query,
+        "resultsOptions": {"take": take, "skip": 0},
+        "customData": {"personalize": False},
+    }
+    req = urllib.request.Request(
+        APOTEKET_SEARCH_URL, data=json.dumps(body).encode("utf-8"), method="POST",
+        headers={**HEADERS, "Content-Type": "application/json",
+                 "api-version": "V3", "lib-version": "JS:1.16.186",
+                 "user-id": "blojkalkylatorn"},
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
+        data = json.loads(r.read().decode("utf-8", "replace"))
+
+    out: List[Product] = []
+    for it in data.get("results", {}).get("items", []):
+        attrs = {a.get("name"): a.get("values", []) for a in it.get("attributes", [])}
+        name = (attrs.get("Name") or [""])[0]
+        brand = _normalize_brand((attrs.get("Brand") or [None])[0])
+        price = (attrs.get("Price") or [None])[0]
+        campaign = (attrs.get("CampaignPrice") or [0])[0]
+        if campaign and price is not None and campaign > 0:
+            price = campaign
+        pkg = (attrs.get("PackageText") or [None])[0]
+        count = _extract_count(pkg or "", "") if pkg else None
+        if count is None:
+            count = _extract_count(name, "")
+        per = (price / count) if (price is not None and count) else None
+        slug = (attrs.get("ProductURL") or [""])[0]
+        full_url = ("https://www.apoteket.se" + slug) if slug.startswith("/") else slug
+        out.append(Product(
+            store="Apoteket",
+            name=name,
+            brand=brand,
+            price=price,
+            count=count,
+            price_per=per,
+            jmf=None,
+            url=full_url,
+        ))
+    return out
+
+
+# --------------------------------------------------------------------------
 # Huvudlogik
 # --------------------------------------------------------------------------
 
@@ -543,7 +595,7 @@ def main() -> None:
     ap.add_argument("--sok", default="blöjor",
                     help="Sökord, kommaseparerade (t.ex. 'blöjor,libero,pampers')")
     ap.add_argument("--butiker", default="willys,apotea",
-                    help="Butiker att söka i (willys,hemkop,apotea,coop,ica)")
+                    help="Butiker att söka i (willys,hemkop,apotea,coop,apoteket,ica)")
     ap.add_argument("--marke", default=None,
                     help="Filtrera på märke (Libero, Pampers)")
     ap.add_argument("--ica-butik", default=None,
@@ -632,11 +684,13 @@ def main() -> None:
                     products.extend(fetch_apotea(q, max_pages=args.max_sidor, fill_jmf=args.jmf_pris))
                 elif store == "coop":
                     products.extend(fetch_coop(q))
+                elif store == "apoteket":
+                    products.extend(fetch_apoteket(q))
                 elif store == "ica":
                     if ica_account_id:
                         products.extend(fetch_ica(q, ica_account_id, prefer_browser=not args.ica_http))
                 else:
-                    print(f"⚠️  Okänd butik: {store} (stöds: willys, hemkop, apotea, coop, ica)", file=sys.stderr)
+                    print(f"⚠️  Okänd butik: {store} (stöds: willys, hemkop, apotea, coop, apoteket, ica)", file=sys.stderr)
             except Exception as e:
                 print(f"⚠️  Kunde inte hämta från {store} ('{q}'): {e}", file=sys.stderr)
 
