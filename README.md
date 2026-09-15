@@ -1,8 +1,9 @@
 # Blöjkalkylatorn 🍼
 
-Ett litet Python-program som hämtar aktuella blöjpriser (Libero, Pampers m.fl.)
-från svenska nätbutiker och testar kuponger/rabatter för att räkna fram
-**billigaste priset per blöja (kr/blöja)**.
+Ett litet Python-program som hämtar **riktiga, aktuella** blöjpriser (Libero,
+Pampers m.fl.) från svenska nätbutiker och visar butikernas egna kampanjer, för
+att hitta **billigaste priset per blöja (kr/blöja)**. Ingen hypotetisk data –
+bara riktiga priser och riktiga erbjudanden.
 
 ## Krav
 
@@ -23,7 +24,7 @@ Om Playwright inte är installerat faller ICA automatiskt tillbaka på vanlig HT
 Öppna en terminal i den här mappen och kör:
 
 ```bash
-# Jämför alla blöjor i Willys och Apotea (utan kuponger)
+# Jämför alla blöjor i Willys och Apotea
 python3 blojkalkylatorn.py
 
 # Bara Libero
@@ -41,66 +42,35 @@ python3 blojkalkylatorn.py --butiker ica --ica-butik "maxi stockholm"
 
 Programmet sorterar alltid på **billigast kr/blöja** överst.
 
-## Testa kuponger/rabatter
+## ★ Riktiga kampanjer (ingen hypotetisk data)
 
-### 1) Snabbkuponger direkt i terminalen
+Programmet visar **bara riktiga, aktuella priser och erbjudanden** som hämtas
+direkt från butikernas egna API:er – inga "tänk om"-kuponger som du hittar på.
 
-```bash
-# 20 % rabatt på allt
-python3 blojkalkylatorn.py --procent 20
+Produkter med en pågående kampanj/erbjudande markeras med **★** i tabellen, och
+längst ned listas alla med detaljer. Erbjudandena kan dock ha villkor:
 
-# 10 kr rabatt per förpackning
-python3 blojkalkylatorn.py --fast 10
+- **Medlemskap** krävs ibland (t.ex. ICA Stammis, Coop Medlem, Willys+,
+  City Gross medlemspris).
+- **Minsta köp** (t.ex. "handla för 300 kr").
+- **Giltighetstid** och **engångs-/flergångsrabatter**.
 
-# "Köp 3, betala för 2"
-python3 blojkalkylatorn.py --kop-betala 3/2
+Vissa butiker (Apoteket, Mathem) lägger redan in kampanjpriset i priset som
+visas, medan andra (t.ex. City Gross medlemspris) visas som en separat ★-rad.
+Kontrollera alltid villkoret hos butiken innan du litar på priset.
 
-# Flera kuponger samtidigt (de staplas)
-python3 blojkalkylatorn.py --marke Libero --procent 20 --kop-betala 3/2
+### Exempel på utskrift
+
 ```
+#  Butik       Pris/fp   Antal  kr/blöja  Märke   Produkt
+1  City Gross  42,95 kr   24 st   1,79 kr  Libero  Comfort 1 2-5Kg
+...
+6  City Gross  99,95 kr   43 st   2,32 kr  Libero  Comfort 3 5-8Kg ★
 
-### 2) En kupongfil (mer kontroll – kan rikta kupongen mot märke/butik)
-
-Redigera `kuponger.json` och kör med `--kuponger`:
-
-```bash
-python3 blojkalkylatorn.py --kuponger kuponger.json
+★ Erbjudanden/kampanjer som butikerna visar just nu (kan kräva medlemskap
+  eller minsta köp – oftast inte inräknade i priset ovan):
+  ★ City Gross: Comfort 3 5-8Kg → 2500324255 (94.95 kr) [medlem]
 ```
-
-Kupongtyper i filen:
-
-| typ          | varde / fält         | betydelse                              |
-|--------------|----------------------|----------------------------------------|
-| `procent`    | `varde: 20`          | 20 % rabatt                            |
-| `fast`       | `varde: 15`          | 15 kr rabatt per förpackning           |
-| `kop_betala` | `kop: 3, betala: 2`  | köp 3, betala för 2                    |
-
-Valfria begränsningar per kupong:
-- `marke` – gäller bara det märket (t.ex. `"Libero"`).
-- `butik` – gäller bara den butiken (t.ex. `"Apotea"`).
-
-### ⚠️ Hur vet jag att en kupong gäller?
-
-**Kupongerna du skriver in verifieras INTE automatiskt.** Programmet är en
-"tänk om"-räknare: det räknar ut vad priset *skulle bli* om rabatten gällde.
-Du måste själv kontrollera att kupongen faktiskt finns och gäller:
-
-- **Var kommer kupongen ifrån?** Butikens app, ett reklamblad, eller ett
-  lojalitetsprogram (ICA Stammis, Coop Medlem, Willys+ m.fl.)?
-- **Villkor**: gäller den just ditt märke och storlek, vilken giltighetstid,
-  krävs minsta köp, är den endast för medlemmar, engångs eller flergångs?
-- **Var** gäller den (online, i butik, eller båda)?
-
-Kontrollera alltså kupongens faktiska villkor hos butiken innan du litar på
-siffran.
-
-### ★ Riktiga kampanjer (nytt)
-
-Som komplement visar programmet **butikernas egna aktuella erbjudanden**, som
-hämtas direkt från deras API:er och markeras med **★**. Dessa är *riktiga*
-erbjudanden (inte något du hittat på), men kan kräva medlemskap eller minsta
-köp – och är oftast **inte** inräknade i priset i tabellen. Längst ned i
-utskriften listas de med detaljer.
 
 ## Övriga flaggor
 

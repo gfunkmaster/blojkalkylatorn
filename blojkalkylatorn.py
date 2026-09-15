@@ -5,7 +5,8 @@ Blöjkalkylatorn
 ===============
 
 Hämtar aktuella priser på blöjor (Libero, Pampers m.fl.) från svenska butiker
-och testar kuponger/rabatter för att räkna fram billigaste priset per blöja.
+och visar butikernas riktiga aktuella kampanjer, för att hitta billigaste
+priset per blöja. Ingen hypotetisk data – bara riktiga priser och erbjudanden.
 
 Butiker som stöds just nu:
   * Willys  – ren JSON (jämförpris = kr/blöja direkt)
@@ -17,19 +18,13 @@ Butiker som stöds just nu:
   * City Gross – Loop54-sök-API (ger pris, antal och jämförpris direkt)
   * ICA     – parsar serverrenderad HTML (kräver val av butik, Playwright för bot-skydd)
 
-Kör exempel (utan kuponger):
+Kör exempel:
     python3 blojkalkylatorn.py
     python3 blojkalkylatorn.py --marke Libero
     python3 blojkalkylatorn.py --sok "blöjor,libero,pampers"
-    python3 blojkalkylatorn.py --butiker willys,hemkop,apotea,coop,ica --ica-butik "maxi stockholm"
+    python3 blojkalkylatorn.py --butiker willys,hemkop,apotea,coop,apoteket,mathem,citygross,ica
 
-Kör med kuponger (läses från en JSON-fil):
-    python3 blojkalkylatorn.py --kuponger kuponger.json
-
-Snabbkuponger direkt på kommandoraden:
-    python3 blojkalkylatorn.py --procent 20          # 20 % rabatt på allt
-    python3 blojkalkylatorn.py --fast 10             # 10 kr rabatt per förpackning
-    python3 blojkalkylatorn.py --kop-betala 3/2      # köp 3, betala 2
+Riktiga aktuella kampanjer (hämtas direkt från butikernas API:er) markeras med ★.
 
 Alla belopp i svenska kronor (kr). Sorterar alltid på billigast kr/blöja.
 """
@@ -89,43 +84,10 @@ class Product:
     brand: str                      # "Libero", "Pampers", "Övrigt"
     price: Optional[float]          # kr per förpackning
     count: Optional[int]            # antal blöjor per förpackning
-    price_per: Optional[float]      # kr per blöja (bas, utan kupong)
+    price_per: Optional[float]      # kr per blöja (aktuellt pris)
     jmf: Optional[str]              # officiellt jämförpris i klartext
     url: str = ""
     kampanj: str = ""               # riktig aktuell kampanj hos butiken (om någon)
-
-
-@dataclass
-class Coupon:
-    typ: str                        # "procent" | "fast" | "kop_betala"
-    varde: float = 0.0              # procent (20 = 20 %) eller kr för "fast"
-    kop: int = 1                    # "kop_betala": köp X ...
-    betala: int = 1                 # ... betala för Y
-    marke: Optional[str] = None     # gäller bara detta märke (t.ex. "Libero")
-    butik: Optional[str] = None     # gäller bara denna butik (t.ex. "Willys")
-    beskrivning: str = ""
-
-    def galler(self, p: Product) -> bool:
-        if self.marke and self.marke.lower() not in (p.brand or "").lower():
-            return False
-        if self.butik and self.butik.lower() != (p.store or "").lower():
-            return False
-        return True
-
-    def applicera(self, p: Product) -> Optional[float]:
-        """Returnerar nytt kr/blöja efter kupongen, eller None om det inte går."""
-        if p.price_per is None:
-            return None
-        if self.typ == "procent":
-            return p.price_per * (1 - self.varde / 100.0)
-        if self.typ == "fast":
-            if p.count and p.price is not None:
-                return max(0.0, p.price - self.varde) / p.count
-            return None
-        if self.typ == "kop_betala":
-            if self.kop > 0:
-                return p.price_per * (self.betala / self.kop)
-        return None
 
 
 # --------------------------------------------------------------------------
@@ -660,53 +622,15 @@ def fetch_citygross(query: str, take: int = 60) -> List[Product]:
 # Huvudlogik
 # --------------------------------------------------------------------------
 
-def load_coupons(path: str) -> List[Coupon]:
-    with open(path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
-    coupons: List[Coupon] = []
-    for item in raw.get("kuponger", []):
-        coupons.append(Coupon(
-            typ=item.get("typ", "procent"),
-            varde=float(item.get("varde", 0)),
-            kop=int(item.get("kop", 1)),
-            betala=int(item.get("betala", 1)),
-            marke=item.get("marke"),
-            butik=item.get("butik"),
-            beskrivning=item.get("beskrivning", ""),
-        ))
-    return coupons
-
-
 def format_kr(x: Optional[float]) -> str:
     if x is None:
         return "-"
     return f"{x:.2f}".replace(".", ",") + " kr"
 
 
-def apply_coupons(p: Product, coupons: List[Coupon]) -> Optional[float]:
-    """Tillämpar alla kuponger som gäller produkten i tur och ordning (staplas)."""
-    cur = p.price_per
-    if cur is None:
-        return None
-    for c in coupons:
-        if not c.galler(p):
-            continue
-        # Låt varje kupong räkna på det ackumulerade priset så att rabatter staplas.
-        p.price_per = cur
-        if p.count and p.price is not None:
-            p.price = cur * p.count
-        nxt = c.applicera(p)
-        if nxt is None:
-            continue
-        cur = nxt
-    if p.count:
-        p.price = cur * p.count
-    return cur
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Jämför blöjpriser och testa kuponger (kr/blöja).",
+        description="Jämför blöjpriser och visar riktiga kampanjer (kr/blöja).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     ap.add_argument("--sok", default="blöjor",
@@ -723,8 +647,6 @@ def main() -> None:
                     help="Lista ICA-butiker som matchar söktermen och avsluta (t.ex. 'maxi stockholm')")
     ap.add_argument("--ica-http", action="store_true",
                     help="Tvinga ICA-hämtning via vanlig HTTP (utan webbläsare)")
-    ap.add_argument("--kuponger", default=None,
-                    help="Sökväg till JSON-fil med kuponger")
     ap.add_argument("--topp", type=int, default=25,
                     help="Antal resultat att visa")
     ap.add_argument("--max-sidor", type=int, default=3,
@@ -733,10 +655,6 @@ def main() -> None:
                     help="Hämta officiellt jämförpris från Apoteas produktsidor (långsammare)")
     ap.add_argument("--visa-alla", action="store_true",
                     help="Visa även produkter som inte är blöjor")
-    # Snabbkuponger
-    ap.add_argument("--procent", type=float, default=None, help="Procentrabatt på allt (t.ex. 20)")
-    ap.add_argument("--fast", type=float, default=None, help="Fast rabatt i kr per förpackning")
-    ap.add_argument("--kop-betala", default=None, help="Köp X betala Y, t.ex. '3/2'")
     args = ap.parse_args()
 
     # Lista ICA-butiker och avsluta (hjälpfunktion)
@@ -754,19 +672,6 @@ def main() -> None:
 
     stores = [s.strip().lower() for s in args.butiker.split(",") if s.strip()]
     queries = [q.strip() for q in args.sok.split(",") if q.strip()]
-
-    coupons: List[Coupon] = []
-    if args.kuponger:
-        coupons = load_coupons(args.kuponger)
-    if args.procent is not None:
-        coupons.append(Coupon("procent", varde=args.procent, beskrivning=f"{args.procent:g} % rabatt"))
-    if args.fast is not None:
-        coupons.append(Coupon("fast", varde=args.fast, beskrivning=f"{args.fast:g} kr rabatt"))
-    if args.kop_betala:
-        parts = args.kop_betala.split("/")
-        if len(parts) == 2:
-            coupons.append(Coupon("kop_betala", kop=int(parts[0]), betala=int(parts[1]),
-                                  beskrivning=f"köp {parts[0]} betala {parts[1]}"))
 
 
     # Bestäm ICA-butik om ICA valts (priserna skiljer sig mellan butiker)
@@ -832,11 +737,6 @@ def main() -> None:
         wanted = args.marke.lower()
         unique = [p for p in unique if wanted in p.brand.lower()]
 
-    # Beräkna slutpris efter kuponger
-    for p in unique:
-        if coupons:
-            p.price_per = apply_coupons(p, coupons)
-
     # Sortera på billigast kr/blöja (okända sist)
     unique.sort(key=lambda p: (p.price_per is None, p.price_per if p.price_per is not None else 0))
 
@@ -847,11 +747,7 @@ def main() -> None:
     print(" Sökord:", ", ".join(queries), "| Butiker:", ", ".join(stores))
     if args.marke:
         print(" Märke:", args.marke)
-    if coupons:
-        print(" Kuponger:")
-        for c in coupons:
-            tag = " ".join(x for x in [c.marke, c.butik] if x)
-            print("   •", c.beskrivning or c.typ, ("(" + tag + ")" if tag else ""))
+    print(" Priserna är butikernas aktuella priser (riktiga kampanjer markeras med ★).")
     print("=" * 100)
 
     header = f"{'#':>3}  {'Butik':<7} {'Pris/fp':>9} {'Antal':>7} {'kr/blöja':>9}  {'Märke':<8} Produkt"
