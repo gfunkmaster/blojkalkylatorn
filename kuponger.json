@@ -1,0 +1,24 @@
+{
+  "sokord": ["blöjor", "libero", "pampers"],
+  "kuponger": [
+    {
+      "typ": "procent",
+      "varde": 20,
+      "marke": "Libero",
+      "beskrivning": "20 % rabatt på alla Libero-blöjor"
+    },
+    {
+      "typ": "fast",
+      "varde": 15,
+      "marke": "Pampers",
+      "butik": "Apotea",
+      "beskrivning": "15 kr rabatt per Pampers-förpackning på Apotea"
+    },
+    {
+      "typ": "kop_betala",
+      "kop": 3,
+      "betala": 2,
+      "beskrivning": "Köp 3 förpackningar, betala för 2"
+    }
+  ]
+}
