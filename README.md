@@ -79,6 +79,29 @@ Valfria begränsningar per kupong:
 - `marke` – gäller bara det märket (t.ex. `"Libero"`).
 - `butik` – gäller bara den butiken (t.ex. `"Apotea"`).
 
+### ⚠️ Hur vet jag att en kupong gäller?
+
+**Kupongerna du skriver in verifieras INTE automatiskt.** Programmet är en
+"tänk om"-räknare: det räknar ut vad priset *skulle bli* om rabatten gällde.
+Du måste själv kontrollera att kupongen faktiskt finns och gäller:
+
+- **Var kommer kupongen ifrån?** Butikens app, ett reklamblad, eller ett
+  lojalitetsprogram (ICA Stammis, Coop Medlem, Willys+ m.fl.)?
+- **Villkor**: gäller den just ditt märke och storlek, vilken giltighetstid,
+  krävs minsta köp, är den endast för medlemmar, engångs eller flergångs?
+- **Var** gäller den (online, i butik, eller båda)?
+
+Kontrollera alltså kupongens faktiska villkor hos butiken innan du litar på
+siffran.
+
+### ★ Riktiga kampanjer (nytt)
+
+Som komplement visar programmet **butikernas egna aktuella erbjudanden**, som
+hämtas direkt från deras API:er och markeras med **★**. Dessa är *riktiga*
+erbjudanden (inte något du hittat på), men kan kräva medlemskap eller minsta
+köp – och är oftast **inte** inräknade i priset i tabellen. Längst ned i
+utskriften listas de med detaljer.
+
 ## Övriga flaggor
 
 | Flagga                 | Betydelse                                              |

@@ -92,6 +92,7 @@ class Product:
     price_per: Optional[float]      # kr per blöja (bas, utan kupong)
     jmf: Optional[str]              # officiellt jämförpris i klartext
     url: str = ""
+    kampanj: str = ""               # riktig aktuell kampanj hos butiken (om någon)
 
 
 @dataclass
@@ -193,6 +194,13 @@ def fetch_axfood(query: str, base_url: str, store_name: str) -> List[Product]:
         count = None
         if per and price:
             count = round(price / per)
+        kampanj = ""
+        promos = r.get("potentialPromotions") or []
+        if promos:
+            p0 = promos[0]
+            delar = [x for x in (p0.get("textLabel"), p0.get("conditionLabel"),
+                                 p0.get("rewardLabel"), p0.get("splashTitleText")) if x]
+            kampanj = " · ".join(delar)
         out.append(Product(
             store=store_name,
             name=name,
@@ -202,6 +210,7 @@ def fetch_axfood(query: str, base_url: str, store_name: str) -> List[Product]:
             price_per=per,
             jmf=(jmf + " " + (r.get("comparePriceUnit") or "")).strip() if jmf else None,
             url=base_url + "/search?q=" + urllib.parse.quote(query),
+            kampanj=kampanj,
         ))
     return out
 
@@ -519,7 +528,9 @@ def fetch_apoteket(query: str, take: int = 100) -> List[Product]:
         brand = _normalize_brand((attrs.get("Brand") or [None])[0])
         price = (attrs.get("Price") or [None])[0]
         campaign = (attrs.get("CampaignPrice") or [0])[0]
+        kampanj = ""
         if campaign and price is not None and campaign > 0:
+            kampanj = f"Kampanj {campaign} kr (ord. {price} kr)"
             price = campaign
         pkg = (attrs.get("PackageText") or [None])[0]
         count = _extract_count(pkg or "", "") if pkg else None
@@ -537,6 +548,7 @@ def fetch_apoteket(query: str, take: int = 100) -> List[Product]:
             price_per=per,
             jmf=None,
             url=full_url,
+            kampanj=kampanj,
         ))
     return out
 
@@ -563,6 +575,16 @@ def fetch_mathem(query: str, max_pages: int = 2) -> List[Product]:
             per = parse_se_number(str(a.get("gross_unit_price")) if a.get("gross_unit_price") else None)
             count = _extract_count(a.get("name_extra") or "", "") or _extract_count(name, "")
             full_url = a.get("front_url") or a.get("absolute_url") or ""
+            kampanj = ""
+            discount = a.get("discount") or {}
+            if discount.get("is_discounted"):
+                orig = discount.get("undiscounted_gross_price")
+                if orig and price is not None:
+                    try:
+                        if float(orig) > price:
+                            kampanj = f"Kampanj {price} kr (ord. {orig} kr)"
+                    except (ValueError, TypeError):
+                        pass
             out.append(Product(
                 store="Mathem",
                 name=name,
@@ -572,6 +594,7 @@ def fetch_mathem(query: str, max_pages: int = 2) -> List[Product]:
                 price_per=per,
                 jmf=(f"{per:.2f}".replace(".", ",") + " kr/st") if per else None,
                 url=full_url,
+                kampanj=kampanj,
             ))
         if not data.get("attributes", {}).get("has_more_items"):
             break
@@ -610,6 +633,15 @@ def fetch_citygross(query: str, take: int = 60) -> List[Product]:
             count = _extract_count(p.get("subtitle") or "", "")
         slug = p.get("url") or ""
         full_url = ("https://www.citygross.se" + slug) if slug.startswith("/") else slug
+        kampanj = ""
+        active = prices.get("activePromotion") or {}
+        if prices.get("hasPromotion") or prices.get("hasDiscount"):
+            kampanj = str(active.get("name") or "Kampanj")
+            pd = active.get("priceDetails") or {}
+            if pd.get("price"):
+                kampanj += f" ({pd.get('price')} kr)"
+            if active.get("membersOnly"):
+                kampanj += " [medlem]"
         out.append(Product(
             store="City Gross",
             name=name,
@@ -619,6 +651,7 @@ def fetch_citygross(query: str, take: int = 60) -> List[Product]:
             price_per=per,
             jmf=(f"{per:.2f}".replace(".", ",") + " kr/st") if per else None,
             url=full_url,
+            kampanj=kampanj,
         ))
     return out
 
@@ -832,12 +865,21 @@ def main() -> None:
         shown += 1
         count_s = f"{p.count} st" if p.count else "-"
         mark = "*" if p.price_per is None else " "
+        star = " ★" if p.kampanj else ""
         line = (f"{i:>3}{mark}  {p.store:<7} {format_kr(p.price):>9} {count_s:>7} "
-                f"{format_kr(p.price_per):>9}  {p.brand:<8} {p.name}")
+                f"{format_kr(p.price_per):>9}  {p.brand:<8} {p.name}{star}")
         print(line[:100])
 
     if len(unique) > shown:
         print(f"... ({len(unique) - shown} fler, öka --topp för att se alla)")
+
+    campaign_products = [p for p in unique if p.kampanj]
+    if campaign_products:
+        print()
+        print("★ Erbjudanden/kampanjer som butikerna visar just nu (kan kräva medlemskap")
+        print("  eller minsta köp – oftast inte inräknade i priset ovan):")
+        for p in campaign_products:
+            print(f"  ★ {p.store}: {p.name} → {p.kampanj}")
 
     without_price = [p for p in unique if p.price_per is None]
     if without_price:
