@@ -1,0 +1,44 @@
+{
+  "kuponger": [
+    {
+      "beskrivning": "20 % rabatt på Libero Comfort storlek 4",
+      "typ": "procent",
+      "varde": 20,
+      "kalla": "Coop Medlem",
+      "marke": "Libero",
+      "storlek": "Comfort 4",
+      "minsta_kop": 300,
+      "endast_medlem": true,
+      "giltig_till": "2026-12-31",
+      "engangs": false,
+      "gallplats": "båda"
+    },
+    {
+      "beskrivning": "15 kr rabatt per Pampers-förpackning på Apotea",
+      "typ": "fast",
+      "varde": 15,
+      "kalla": "butiksapp",
+      "marke": "Pampers",
+      "storlek": null,
+      "minsta_kop": 0,
+      "endast_medlem": false,
+      "giltig_till": "2026-10-01",
+      "engangs": true,
+      "gallplats": "online"
+    },
+    {
+      "beskrivning": "Köp 3 betala 2 på alla blöjor",
+      "typ": "kop_betala",
+      "kop": 3,
+      "betala": 2,
+      "kalla": "reklamblad",
+      "marke": null,
+      "storlek": null,
+      "minsta_kop": 0,
+      "endast_medlem": false,
+      "giltig_till": "2026-09-30",
+      "engangs": false,
+      "gallplats": "butik"
+    }
+  ]
+}

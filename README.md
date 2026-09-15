@@ -2,8 +2,8 @@
 
 Ett litet Python-program som hämtar **riktiga, aktuella** blöjpriser (Libero,
 Pampers m.fl.) från svenska nätbutiker och visar butikernas egna kampanjer, för
-att hitta **billigaste priset per blöja (kr/blöja)**. Ingen hypotetisk data –
-bara riktiga priser och riktiga erbjudanden.
+att hitta **billigaste priset per blöja (kr/blöja)**. Du kan även mata in egna
+kuponger med villkor och få dem verifierade mot de riktiga produkterna.
 
 ## Krav
 
@@ -42,10 +42,10 @@ python3 blojkalkylatorn.py --butiker ica --ica-butik "maxi stockholm"
 
 Programmet sorterar alltid på **billigast kr/blöja** överst.
 
-## ★ Riktiga kampanjer (ingen hypotetisk data)
+## ★ Riktiga kampanjer
 
-Programmet visar **bara riktiga, aktuella priser och erbjudanden** som hämtas
-direkt från butikernas egna API:er – inga "tänk om"-kuponger som du hittar på.
+Programmet visar **riktiga, aktuella priser och erbjudanden** som hämtas
+direkt från butikernas egna API:er.
 
 Produkter med en pågående kampanj/erbjudande markeras med **★** i tabellen, och
 längst ned listas alla med detaljer. Erbjudandena kan dock ha villkor:
@@ -72,6 +72,42 @@ Kontrollera alltid villkoret hos butiken innan du litar på priset.
   ★ City Gross: Comfort 3 5-8Kg → 2500324255 (94.95 kr) [medlem]
 ```
 
+## Verifiera egna kuponger
+
+Du kan mata in en **riktig kupong** med dess villkor i `kuponger.json` och köra
+med `--kuponger`. Programmet filtrerar då fram rätt produkter (märke + storlek),
+räknar ut priset och **visar alla villkor tydligt** så att du kan kontrollera dem.
+
+### Kupongens villkor (du fyller i dem själv)
+
+| Fält           | Betydelse                                                        |
+|----------------|------------------------------------------------------------------|
+| `beskrivning`  | T.ex. "20 % på Libero Comfort strl 4"                            |
+| `typ`          | `procent`, `fast` (kr) eller `kop_betala`                        |
+| `varde`        | Procent (20) eller kr (15)                                       |
+| `kop`/`betala` | För `kop_betala`: köp X, betala Y                                |
+| `kalla`        | **Var kommer den ifrån?** (ICA Stammis, Coop Medlem, reklamblad…) |
+| `marke`        | Vilket märke den gäller (t.ex. `Libero`)                         |
+| `storlek`      | Vilken storlek (matchas mot produktnamnet, t.ex. `Comfort 4`)     |
+| `minsta_kop`   | Minsta köp i kr (gäller hela korgen)                             |
+| `endast_medlem`| Kräver medlemskap (true/false)                                   |
+| `giltig_till`  | Giltig till datum (t.ex. `2026-12-31`)                           |
+| `engangs`      | Engångsrabatt (true/false)                                       |
+| `gallplats`    | `online`, `butik` eller `båda`                                   |
+
+### Exempel på utskrift med kupong
+
+```
+Kuponger (med villkor att verifiera):
+  • 20 % rabatt på Libero Comfort storlek 4
+    └ Källa: Coop Medlem · Märke: Libero · Storlek: Comfort 4 · Minsta köp: 300 kr · Endast medlem · Giltig t.o.m. 2026-12-31 · Gäller: båda
+```
+
+Programmet kan **bara** filtrera på märke/storlek och räkna ut rabatten. De
+övriga villkoren (källa, giltighet, medlemskrav, minsta köp, engångs, plats)
+visas så att **du själv kontrollerar** att kupongen faktiskt är riktig och gäller
+för ditt köp.
+
 ## Övriga flaggor
 
 | Flagga                 | Betydelse                                              |
@@ -83,6 +119,7 @@ Kontrollera alltid villkoret hos butiken innan du litar på priset.
 | `--ica-id`             | Välj ICA-butik via accountId direkt (t.ex. `1003723`)   |
 | `--lista-ica-butiker`  | Lista ICA-butiker som matchar sökordet och avsluta      |
 | `--ica-http`           | Tvinga ICA-hämtning via vanlig HTTP (utan webbläsare)    |
+| `--kuponger`           | Sökväg till JSON-fil med kuponger (med villkor)          |
 | `--topp`               | Antal rader att visa (standard 25)                     |
 | `--max-sidor`          | Antal sök-sidor per butik (Apotea, standard 3)         |
 | `--jmf-pris`           | Hämta officiellt jämförpris från Apoteas produktsidor   |
