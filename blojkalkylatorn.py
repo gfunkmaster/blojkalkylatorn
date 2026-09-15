@@ -13,6 +13,8 @@ Butiker som stöds just nu:
   * Apotea  – parsar serverrenderad HTML (kr/blöja från antal i namnet)
   * Coop    – personaliserings-API (ger pris, antal och jämförpris direkt)
   * Apoteket – sök-API (ger pris, antal och kampanjpris direkt)
+  * Mathem  – sök-API (ger pris, antal och jämförpris direkt)
+  * City Gross – Loop54-sök-API (ger pris, antal och jämförpris direkt)
   * ICA     – parsar serverrenderad HTML (kräver val av butik, Playwright för bot-skydd)
 
 Kör exempel (utan kuponger):
@@ -540,6 +542,88 @@ def fetch_apoteket(query: str, take: int = 100) -> List[Product]:
 
 
 # --------------------------------------------------------------------------
+# Mathem (öppet sök-API)
+# --------------------------------------------------------------------------
+
+MATHEM_SEARCH_URL = "https://www.mathem.se/api/v1/search/mixed/"
+
+
+def fetch_mathem(query: str, max_pages: int = 2) -> List[Product]:
+    out: List[Product] = []
+    for page in range(1, max_pages + 1):
+        url = (MATHEM_SEARCH_URL + "?q=" + urllib.parse.quote(query)
+               + "&type=product&page=" + str(page))
+        data = json.loads(http_get(url))
+        items = data.get("items", [])
+        for it in items:
+            a = it.get("attributes", {})
+            name = a.get("full_name") or a.get("name") or ""
+            brand = _normalize_brand(a.get("brand"))
+            price = parse_se_number(str(a.get("gross_price")) if a.get("gross_price") else None)
+            per = parse_se_number(str(a.get("gross_unit_price")) if a.get("gross_unit_price") else None)
+            count = _extract_count(a.get("name_extra") or "", "") or _extract_count(name, "")
+            full_url = a.get("front_url") or a.get("absolute_url") or ""
+            out.append(Product(
+                store="Mathem",
+                name=name,
+                brand=brand,
+                price=price,
+                count=count,
+                price_per=per,
+                jmf=(f"{per:.2f}".replace(".", ",") + " kr/st") if per else None,
+                url=full_url,
+            ))
+        if not data.get("attributes", {}).get("has_more_items"):
+            break
+    return out
+
+
+# --------------------------------------------------------------------------
+# City Gross (Loop54-sök-API)
+# --------------------------------------------------------------------------
+
+CITYGROSS_SEARCH_URL = "https://www.citygross.se/api/v1/Loop54/search"
+
+
+def fetch_citygross(query: str, take: int = 60) -> List[Product]:
+    url = (CITYGROSS_SEARCH_URL + "?SearchQuery=" + urllib.parse.quote(query)
+           + "&skip=0&take=" + str(take))
+    data = json.loads(http_get(url))
+    out: List[Product] = []
+    for p in data.get("searchResults", {}).get("products", []):
+        name = p.get("name") or ""
+        brand = _normalize_brand(p.get("brand"))
+        psd = p.get("productStoreDetails") or {}
+        prices = psd.get("prices") or {}
+        cur = prices.get("currentPrice") or {}
+        price = cur.get("price")
+        per = cur.get("comparativePrice")
+        # antal från "27P" (pieces) i descriptiveSize/subtitle
+        count = None
+        for field in (p.get("descriptiveSize"), p.get("subtitle")):
+            if field:
+                m = re.search(r"(\d+)\s*[Pp]\b", field)
+                if m:
+                    count = int(m.group(1))
+                    break
+        if count is None:
+            count = _extract_count(p.get("subtitle") or "", "")
+        slug = p.get("url") or ""
+        full_url = ("https://www.citygross.se" + slug) if slug.startswith("/") else slug
+        out.append(Product(
+            store="City Gross",
+            name=name,
+            brand=brand,
+            price=price,
+            count=count,
+            price_per=per,
+            jmf=(f"{per:.2f}".replace(".", ",") + " kr/st") if per else None,
+            url=full_url,
+        ))
+    return out
+
+
+# --------------------------------------------------------------------------
 # Huvudlogik
 # --------------------------------------------------------------------------
 
@@ -595,7 +679,7 @@ def main() -> None:
     ap.add_argument("--sok", default="blöjor",
                     help="Sökord, kommaseparerade (t.ex. 'blöjor,libero,pampers')")
     ap.add_argument("--butiker", default="willys,apotea",
-                    help="Butiker att söka i (willys,hemkop,apotea,coop,apoteket,ica)")
+                    help="Butiker att söka i (willys,hemkop,apotea,coop,apoteket,mathem,citygross,ica)")
     ap.add_argument("--marke", default=None,
                     help="Filtrera på märke (Libero, Pampers)")
     ap.add_argument("--ica-butik", default=None,
@@ -686,11 +770,15 @@ def main() -> None:
                     products.extend(fetch_coop(q))
                 elif store == "apoteket":
                     products.extend(fetch_apoteket(q))
+                elif store == "mathem":
+                    products.extend(fetch_mathem(q))
+                elif store == "citygross":
+                    products.extend(fetch_citygross(q))
                 elif store == "ica":
                     if ica_account_id:
                         products.extend(fetch_ica(q, ica_account_id, prefer_browser=not args.ica_http))
                 else:
-                    print(f"⚠️  Okänd butik: {store} (stöds: willys, hemkop, apotea, coop, apoteket, ica)", file=sys.stderr)
+                    print(f"⚠️  Okänd butik: {store} (stöds: willys, hemkop, apotea, coop, apoteket, mathem, citygross, ica)", file=sys.stderr)
             except Exception as e:
                 print(f"⚠️  Kunde inte hämta från {store} ('{q}'): {e}", file=sys.stderr)
 

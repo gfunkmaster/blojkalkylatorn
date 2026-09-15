@@ -32,8 +32,8 @@ python3 blojkalkylatorn.py --marke Libero
 # Bara Pampers, visa fler rader
 python3 blojkalkylatorn.py --marke Pampers --topp 40
 
-# Alla sex butikerna (Willys, Hemköp, Apotea, Coop, Apoteket, ICA)
-python3 blojkalkylatorn.py --butiker willys,hemkop,apotea,coop,apoteket,ica
+# Alla åtta butikerna (Willys, Hemköp, Apotea, Coop, Apoteket, Mathem, City Gross, ICA)
+python3 blojkalkylatorn.py --butiker willys,hemkop,apotea,coop,apoteket,mathem,citygross,ica
 
 # ICA med din lokala butik (priserna skiljer sig mellan butiker!)
 python3 blojkalkylatorn.py --butiker ica --ica-butik "maxi stockholm"
@@ -125,6 +125,10 @@ python3 blojkalkylatorn.py --butiker ica --ica-id 1003418
   (`store=251300`).
 - **Apoteket** – har ett sök-API (`apoteket-se.54proxy.com`) som ger pris, antal
   och kampanjpris direkt. Säljer Libero (och eget märke/Naty) men inte Pampers.
+- **Mathem** – öppet sök-API (`/api/v1/search/mixed/`) som ger pris, antal och
+  jämförpris (kr/st) direkt.
+- **City Gross** – Loop54-sök-API (`/api/v1/Loop54/search`) som ger pris, antal
+  och jämförpris (kr/st) direkt.
 - **ICA** – söksidan är serverrenderad HTML med både pris och jämförpris (kr/st).
   Kräver att man väljer butik. Hämtas automatiskt via en riktig webbläsare
   (Playwright) för att ta sig förbi ICA:s bot-skydd (AWS WAF).
@@ -136,10 +140,9 @@ python3 blojkalkylatorn.py --butiker ica --ica-id 1003418
   Playwright (eller med `--ica-http`) faller det tillbaka på vanlig HTTP, som
   ibland blockeras. Webbläsaren renderar söklistan lat – antalet produkter kan
   därför bli något färre än på webben.
-- **Utforskade men inte implementerade butiker:** Mathem (Next.js/Sanity) och
-  City Gross (React-SPA) har komplexa eller obfuskerade API:er, och ÖoB blockeras
-  av Cloudflare. Arkitekturen är gjord så att nya butiker är lätta att lägga till
-  (en funktion per butik som returnerar en lista `Product`).
+- **Utforskade men inte implementerade butiker:** ÖoB blockeras av Cloudflare.
+  Arkitekturen är gjord så att nya butiker är lätta att lägga till (en funktion
+  per butik som returnerar en lista `Product`).
 - **Coop-API:et använder en prenumerationsnyckel** som ligger inbäddad i Coops
   egen webbfrontend (`ocp-apim-subscription-key`). Den kan ändras av Coop utan
   förvarning, vilket i så fall bryter Coop-hämtningen tills nyckeln uppdateras.
