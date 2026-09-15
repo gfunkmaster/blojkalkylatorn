@@ -5,8 +5,8 @@ Blöjkalkylatorn
 ===============
 
 Hämtar aktuella priser på blöjor (Libero, Pampers m.fl.) från svenska butiker
-och visar butikernas riktiga aktuella kampanjer, för att hitta billigaste
-priset per blöja.
+och hittar automatiskt butikernas riktiga aktuella kampanjer, för att hitta
+billigaste priset per blöja. Med --med-kampanj räknas kampanjpriset in.
 
 Du kan även mata in egna kuponger (via --kuponger) med sina villkor – källa,
 märke/storlek, giltighet, minsta köp, medlemskrav, engångs/flergångs och var de
@@ -93,6 +93,7 @@ class Product:
     jmf: Optional[str]              # officiellt jämförpris i klartext
     url: str = ""
     kampanj: str = ""               # riktig aktuell kampanj hos butiken (om någon)
+    kampanj_per: Optional[float] = None  # kampanjpris per blöja (om lägre än price_per)
 
 
 @dataclass
@@ -207,12 +208,14 @@ def fetch_axfood(query: str, base_url: str, store_name: str) -> List[Product]:
         if per and price:
             count = round(price / per)
         kampanj = ""
+        kampanj_per = None
         promos = r.get("potentialPromotions") or []
         if promos:
             p0 = promos[0]
             delar = [x for x in (p0.get("textLabel"), p0.get("conditionLabel"),
                                  p0.get("rewardLabel"), p0.get("splashTitleText")) if x]
             kampanj = " · ".join(delar)
+            kampanj_per = parse_se_number(p0.get("comparePrice"))
         out.append(Product(
             store=store_name,
             name=name,
@@ -223,6 +226,7 @@ def fetch_axfood(query: str, base_url: str, store_name: str) -> List[Product]:
             jmf=(jmf + " " + (r.get("comparePriceUnit") or "")).strip() if jmf else None,
             url=base_url + "/search?q=" + urllib.parse.quote(query),
             kampanj=kampanj,
+            kampanj_per=kampanj_per,
         ))
     return out
 
@@ -646,6 +650,7 @@ def fetch_citygross(query: str, take: int = 60) -> List[Product]:
         slug = p.get("url") or ""
         full_url = ("https://www.citygross.se" + slug) if slug.startswith("/") else slug
         kampanj = ""
+        kampanj_per = None
         active = prices.get("activePromotion") or {}
         if prices.get("hasPromotion") or prices.get("hasDiscount"):
             kampanj = str(active.get("name") or "Kampanj")
@@ -654,6 +659,7 @@ def fetch_citygross(query: str, take: int = 60) -> List[Product]:
                 kampanj += f" ({pd.get('price')} kr)"
             if active.get("membersOnly"):
                 kampanj += " [medlem]"
+            kampanj_per = pd.get("comparativePrice")
         out.append(Product(
             store="City Gross",
             name=name,
@@ -664,6 +670,7 @@ def fetch_citygross(query: str, take: int = 60) -> List[Product]:
             jmf=(f"{per:.2f}".replace(".", ",") + " kr/st") if per else None,
             url=full_url,
             kampanj=kampanj,
+            kampanj_per=kampanj_per,
         ))
     return out
 
@@ -763,6 +770,8 @@ def main() -> None:
                     help="Tvinga ICA-hämtning via vanlig HTTP (utan webbläsare)")
     ap.add_argument("--kuponger", default=None,
                     help="Sökväg till JSON-fil med kuponger (med villkor att verifiera)")
+    ap.add_argument("--med-kampanj", action="store_true",
+                    help="Räkna in butikernas kampanjpris i rankingen (billigast möjliga)")
     ap.add_argument("--topp", type=int, default=25,
                     help="Antal resultat att visa")
     ap.add_argument("--max-sidor", type=int, default=3,
@@ -857,6 +866,14 @@ def main() -> None:
         wanted = args.marke.lower()
         unique = [p for p in unique if wanted in p.brand.lower()]
 
+    # Räkna in butikernas kampanjpris (billigast möjliga, kräver att man uppfyller villkoren)
+    if args.med_kampanj:
+        for p in unique:
+            if p.kampanj_per is not None and p.price_per is not None and p.kampanj_per < p.price_per:
+                p.price_per = p.kampanj_per
+                if p.count:
+                    p.price = p.kampanj_per * p.count
+
     # Tillämpa inmatade kuponger (filtrerar på märke/storlek och räknar rabatt)
     if coupons:
         for p in unique:
@@ -902,10 +919,14 @@ def main() -> None:
     campaign_products = [p for p in unique if p.kampanj]
     if campaign_products:
         print()
-        print("★ Erbjudanden/kampanjer som butikerna visar just nu (kan kräva medlemskap")
-        print("  eller minsta köp – oftast inte inräknade i priset ovan):")
+        if args.med_kampanj:
+            print("★ Kampanjpriser inräknade i tabellen ovan (--med-kampanj):")
+        else:
+            print("★ Erbjudanden/kampanjer som butikerna visar just nu (kan kräva medlemskap")
+            print("  eller minsta köp – oftast inte inräknade i priset ovan):")
         for p in campaign_products:
-            print(f"  ★ {p.store}: {p.name} → {p.kampanj}")
+            per_txt = (" → " + format_kr(p.kampanj_per) + "/blöja") if p.kampanj_per is not None else ""
+            print(f"  ★ {p.store}: {p.name} → {p.kampanj}{per_txt}")
 
     without_price = [p for p in unique if p.price_per is None]
     if without_price:

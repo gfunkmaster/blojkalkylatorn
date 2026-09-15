@@ -44,20 +44,39 @@ Programmet sorterar alltid på **billigast kr/blöja** överst.
 
 ## ★ Riktiga kampanjer
 
-Programmet visar **riktiga, aktuella priser och erbjudanden** som hämtas
-direkt från butikernas egna API:er.
+Programmet **hittar automatiskt** butikernas aktuella kampanjer direkt från
+deras API:er (det är "agenten" som letar åt dig). Produkter med en pågående
+kampanj markeras med **★**, och kampanjpriset per blöja visas.
 
-Produkter med en pågående kampanj/erbjudande markeras med **★** i tabellen, och
-längst ned listas alla med detaljer. Erbjudandena kan dock ha villkor:
+### Hitta alltid billigast: `--med-kampanj`
+
+Med flaggan `--med-kampanj` räknar programmet in kampanjpriset i rankingen, så
+att du ser **det billigaste möjliga priset** (förutsatt att du uppfyller
+kampanjens villkor):
+
+```bash
+python3 blojkalkylatorn.py --marke Pampers --med-kampanj
+```
+
+T.ex. Willys "3 för 249 kr" gör att Pampers Baby Dry 5 sjunker från 3,05 kr till
+**2,24 kr/blöja** – och rankingen sorterar då efter det lägre priset.
+
+### Villkor att känna till
+
+Kampanjerna kan ha villkor som programmet visar men inte kan verifiera åt dig:
 
 - **Medlemskap** krävs ibland (t.ex. ICA Stammis, Coop Medlem, Willys+,
   City Gross medlemspris).
 - **Minsta köp** (t.ex. "handla för 300 kr").
 - **Giltighetstid** och **engångs-/flergångsrabatter**.
 
-Vissa butiker (Apoteket, Mathem) lägger redan in kampanjpriset i priset som
-visas, medan andra (t.ex. City Gross medlemspris) visas som en separat ★-rad.
-Kontrollera alltid villkoret hos butiken innan du litar på priset.
+### ⚠️ Vad agenten INTE kan hämta automatiskt
+
+**Personliga lojalitetskuponger** (ICA Stammis "dina erbjudanden", Coop Medlems
+personliga rabatter, Willys+ etc.) ligger **bakom din inloggning** och är knutna
+till ditt konto. De kan inte hämtas av en extern agent utan dina
+inloggningsuppgifter (och att logga in programmatiskt bryter mot butikernas
+villkor). Dessa får du mata in manuellt via `--kuponger` (se nedan).
 
 ### Exempel på utskrift
 
@@ -69,7 +88,7 @@ Kontrollera alltid villkoret hos butiken innan du litar på priset.
 
 ★ Erbjudanden/kampanjer som butikerna visar just nu (kan kräva medlemskap
   eller minsta köp – oftast inte inräknade i priset ovan):
-  ★ City Gross: Comfort 3 5-8Kg → 2500324255 (94.95 kr) [medlem]
+  ★ City Gross: Comfort 3 5-8Kg → 2500324255 (94.95 kr) [medlem] → 2,21 kr/blöja
 ```
 
 ## Verifiera egna kuponger
@@ -120,6 +139,7 @@ för ditt köp.
 | `--lista-ica-butiker`  | Lista ICA-butiker som matchar sökordet och avsluta      |
 | `--ica-http`           | Tvinga ICA-hämtning via vanlig HTTP (utan webbläsare)    |
 | `--kuponger`           | Sökväg till JSON-fil med kuponger (med villkor)          |
+| `--med-kampanj`        | Räkna in butikernas kampanjpris i rankingen (billigast)  |
 | `--topp`               | Antal rader att visa (standard 25)                     |
 | `--max-sidor`          | Antal sök-sidor per butik (Apotea, standard 3)         |
 | `--jmf-pris`           | Hämta officiellt jämförpris från Apoteas produktsidor   |
