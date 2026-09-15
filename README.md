@@ -32,8 +32,8 @@ python3 blojkalkylatorn.py --marke Libero
 # Bara Pampers, visa fler rader
 python3 blojkalkylatorn.py --marke Pampers --topp 40
 
-# Alla fyra butikerna (Willys, Hemköp, Apotea, ICA)
-python3 blojkalkylatorn.py --butiker willys,hemkop,apotea,ica
+# Alla fem butikerna (Willys, Hemköp, Apotea, Coop, ICA)
+python3 blojkalkylatorn.py --butiker willys,hemkop,apotea,coop,ica
 
 # ICA med din lokala butik (priserna skiljer sig mellan butiker!)
 python3 blojkalkylatorn.py --butiker ica --ica-butik "maxi stockholm"
@@ -120,6 +120,9 @@ python3 blojkalkylatorn.py --butiker ica --ica-id 1003418
 - **Apotea** – söksidan är serverrenderad HTML; programmet räknar ut kr/blöja
   från antalet i produktnamnet (t.ex. "24 st", "111 blöjor"). Med `--jmf-pris`
   hämtas dessutom det officiella jämförpriset från varje produktsida.
+- **Coop** – har ett öppet personaliserings-API (`external.api.coop.se`) som ger
+  pris, antal och jämförpris (kr/st) direkt. Använder Coops standardbutik online
+  (`store=251300`).
 - **ICA** – söksidan är serverrenderad HTML med både pris och jämförpris (kr/st).
   Kräver att man väljer butik. Hämtas automatiskt via en riktig webbläsare
   (Playwright) för att ta sig förbi ICA:s bot-skydd (AWS WAF).
@@ -131,12 +134,14 @@ python3 blojkalkylatorn.py --butiker ica --ica-id 1003418
   Playwright (eller med `--ica-http`) faller det tillbaka på vanlig HTTP, som
   ibland blockeras. Webbläsaren renderar söklistan lat – antalet produkter kan
   därför bli något färre än på webben.
-- **Utforskade men inte implementerade butiker:** Coop (SAP Hybris-API med
-  POST-krav och butiks-id), Apoteket (Next.js med API på prod1–prod3.apoteket.se),
-  Mathem (Next.js/Sanity) och City Gross (React-SPA) har alla komplexa eller
-  obfuskerade API:er, och ÖoB blockeras av Cloudflare. Arkitekturen är gjord så
-  att nya butiker är lätta att lägga till (en funktion per butik som returnerar
-  en lista `Product`).
+- **Utforskade men inte implementerade butiker:** Apoteket (Next.js med API på
+  prod1–prod3.apoteket.se), Mathem (Next.js/Sanity) och City Gross (React-SPA)
+  har alla komplexa eller obfuskerade API:er, och ÖoB blockeras av Cloudflare.
+  Arkitekturen är gjord så att nya butiker är lätta att lägga till (en funktion
+  per butik som returnerar en lista `Product`).
+- **Coop-API:et använder en prenumerationsnyckel** som ligger inbäddad i Coops
+  egen webbfrontend (`ocp-apim-subscription-key`). Den kan ändras av Coop utan
+  förvarning, vilket i så fall bryter Coop-hämtningen tills nyckeln uppdateras.
 - Priserna är **onlinepriser** och kan skilja sig från din lokala butik (gäller
   särskilt ICA, där priset beror på vilken butik du väljer).
 - Webbplatserna kan ändra sin struktur eller börja blockera hämtning. Om något

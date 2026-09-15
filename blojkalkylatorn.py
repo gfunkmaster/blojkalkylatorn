@@ -11,13 +11,14 @@ Butiker som stöds just nu:
   * Willys  – ren JSON (jämförpris = kr/blöja direkt)
   * Hemköp  – samma JSON-API som Willys (samma koncern, Axfood)
   * Apotea  – parsar serverrenderad HTML (kr/blöja från antal i namnet)
-  * ICA     – parsar serverrenderad HTML (kräver val av butik)
+  * Coop    – personaliserings-API (ger pris, antal och jämförpris direkt)
+  * ICA     – parsar serverrenderad HTML (kräver val av butik, Playwright för bot-skydd)
 
 Kör exempel (utan kuponger):
     python3 blojkalkylatorn.py
     python3 blojkalkylatorn.py --marke Libero
     python3 blojkalkylatorn.py --sok "blöjor,libero,pampers"
-    python3 blojkalkylatorn.py --butiker willys,hemkop,apotea,ica --ica-butik "maxi stockholm"
+    python3 blojkalkylatorn.py --butiker willys,hemkop,apotea,coop,ica --ica-butik "maxi stockholm"
 
 Kör med kuponger (läses från en JSON-fil):
     python3 blojkalkylatorn.py --kuponger kuponger.json
@@ -208,6 +209,65 @@ def fetch_willys(query: str) -> List[Product]:
 
 def fetch_hemkop(query: str) -> List[Product]:
     return fetch_axfood(query, "https://www.hemkop.se", "Hemköp")
+
+
+# --------------------------------------------------------------------------
+# Coop (personaliserings-API bakom Azure API Management)
+# --------------------------------------------------------------------------
+
+COOP_SEARCH_URL = "https://external.api.coop.se/personalization/search/products"
+COOP_SUBSCRIPTION_KEY = "3becf0ce306f41a1ae94077c16798187"
+COOP_DEFAULT_STORE = "251300"
+
+
+def _normalize_brand(manufacturer: Optional[str]) -> str:
+    if not manufacturer:
+        return "Övrigt"
+    low = manufacturer.strip().lower()
+    if "libero" in low:
+        return "Libero"
+    if "pampers" in low:
+        return "Pampers"
+    return manufacturer.strip()
+
+
+def fetch_coop(query: str, store_id: str = COOP_DEFAULT_STORE, take: int = 100) -> List[Product]:
+    url = (COOP_SEARCH_URL + "?api-version=v1&store=" + store_id
+           + "&groups=CUSTOMER_PRIVATE&device=desktop&direct=false")
+    body = {
+        "query": query,
+        "resultsOptions": {"skip": 0, "take": take, "sortBy": [], "facets": []},
+        "relatedResultsOptions": {"skip": 0, "take": 16},
+        "customData": {"consent": False},
+    }
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode("utf-8"), method="POST",
+        headers={**HEADERS, "Content-Type": "application/json",
+                 "ocp-apim-subscription-key": COOP_SUBSCRIPTION_KEY},
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
+        data = json.loads(r.read().decode("utf-8", "replace"))
+
+    out: List[Product] = []
+    for it in data.get("results", {}).get("items", []):
+        name = it.get("name") or ""
+        brand = _normalize_brand(it.get("manufacturerName"))
+        price = (it.get("salesPriceData") or {}).get("b2cPrice")
+        per = (it.get("comparativePriceData") or {}).get("b2cPrice")
+        count = it.get("packageSize")
+        if count is not None:
+            count = int(round(count))
+        out.append(Product(
+            store="Coop",
+            name=name,
+            brand=brand,
+            price=price,
+            count=count,
+            price_per=per,
+            jmf=it.get("comparativePriceText"),
+            url="https://www.coop.se/handla/sok/?q=" + urllib.parse.quote(query),
+        ))
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -483,7 +543,7 @@ def main() -> None:
     ap.add_argument("--sok", default="blöjor",
                     help="Sökord, kommaseparerade (t.ex. 'blöjor,libero,pampers')")
     ap.add_argument("--butiker", default="willys,apotea",
-                    help="Butiker att söka i (willys,hemkop,apotea,ica)")
+                    help="Butiker att söka i (willys,hemkop,apotea,coop,ica)")
     ap.add_argument("--marke", default=None,
                     help="Filtrera på märke (Libero, Pampers)")
     ap.add_argument("--ica-butik", default=None,
@@ -570,11 +630,13 @@ def main() -> None:
                     products.extend(fetch_hemkop(q))
                 elif store == "apotea":
                     products.extend(fetch_apotea(q, max_pages=args.max_sidor, fill_jmf=args.jmf_pris))
+                elif store == "coop":
+                    products.extend(fetch_coop(q))
                 elif store == "ica":
                     if ica_account_id:
                         products.extend(fetch_ica(q, ica_account_id, prefer_browser=not args.ica_http))
                 else:
-                    print(f"⚠️  Okänd butik: {store} (stöds: willys, hemkop, apotea, ica)", file=sys.stderr)
+                    print(f"⚠️  Okänd butik: {store} (stöds: willys, hemkop, apotea, coop, ica)", file=sys.stderr)
             except Exception as e:
                 print(f"⚠️  Kunde inte hämta från {store} ('{q}'): {e}", file=sys.stderr)
 
