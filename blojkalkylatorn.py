@@ -749,6 +749,105 @@ def apply_coupons(p: Product, coupons: List[Coupon]) -> Optional[float]:
     return cur
 
 
+def jamfor(sok: str = "blöjor", butiker: str = "willys,apotea", marke: Optional[str] = None,
+           med_kampanj: bool = False, kuponger_path: Optional[str] = None,
+           max_sidor: int = 3, jmf_pris: bool = False, visa_alla: bool = False,
+           ica_butik: Optional[str] = None, ica_id: Optional[str] = None,
+           ica_http: bool = False) -> dict:
+    """Hämtar och jämför blöjpriser. Returnerar ett dict med resultat."""
+    stores = [s.strip().lower() for s in butiker.split(",") if s.strip()]
+    queries = [q.strip() for q in sok.split(",") if q.strip()]
+
+    coupons: List[Coupon] = []
+    if kuponger_path:
+        coupons = load_coupons(kuponger_path)
+
+    ica_account_id: Optional[str] = None
+    ica_store_name = ""
+    if "ica" in stores:
+        if ica_id:
+            ica_account_id = ica_id
+        elif ica_butik:
+            found = find_ica_store(ica_butik)
+            if found:
+                ica_account_id = found.get("accountId")
+                ica_store_name = found.get("name", "")
+        if not ica_account_id:
+            try:
+                first = fetch_ica_stores()[0]
+                ica_account_id = first.get("accountId")
+                ica_store_name = first.get("name", "")
+            except Exception:
+                pass
+
+    products: List[Product] = []
+    warnings: List[str] = []
+    for store in stores:
+        for q in queries:
+            try:
+                if store == "willys":
+                    products.extend(fetch_willys(q))
+                elif store == "hemkop":
+                    products.extend(fetch_hemkop(q))
+                elif store == "apotea":
+                    products.extend(fetch_apotea(q, max_pages=max_sidor, fill_jmf=jmf_pris))
+                elif store == "coop":
+                    products.extend(fetch_coop(q))
+                elif store == "apoteket":
+                    products.extend(fetch_apoteket(q))
+                elif store == "mathem":
+                    products.extend(fetch_mathem(q))
+                elif store == "citygross":
+                    products.extend(fetch_citygross(q))
+                elif store == "ica":
+                    if ica_account_id:
+                        products.extend(fetch_ica(q, ica_account_id, prefer_browser=not ica_http))
+                else:
+                    warnings.append(f"Okänd butik: {store}")
+            except Exception as e:
+                warnings.append(f"Kunde inte hämta från {store} ('{q}'): {e}")
+
+    seen = set()
+    unique: List[Product] = []
+    for p in products:
+        key = (p.store, p.name.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(p)
+
+    if not visa_alla:
+        unique = [p for p in unique if is_diaper(p.name)]
+    if marke:
+        wanted = marke.lower()
+        unique = [p for p in unique if wanted in p.brand.lower()]
+
+    if med_kampanj:
+        for p in unique:
+            if p.kampanj_per is not None and p.price_per is not None and p.kampanj_per < p.price_per:
+                p.price_per = p.kampanj_per
+                if p.count:
+                    p.price = p.kampanj_per * p.count
+
+    if coupons:
+        for p in unique:
+            p.price_per = apply_coupons(p, coupons)
+
+    unique.sort(key=lambda p: (p.price_per is None, p.price_per if p.price_per is not None else 0))
+
+    return {
+        "produkter": unique,
+        "kampanjer": [p for p in unique if p.kampanj],
+        "utan_pris": [p for p in unique if p.price_per is None],
+        "kuponger": coupons,
+        "varningar": warnings,
+        "ica_store_name": ica_store_name,
+        "stores": stores,
+        "queries": queries,
+    }
+
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Jämför blöjpriser och visar riktiga kampanjer (kr/blöja).",
@@ -795,92 +894,21 @@ def main() -> None:
                 print(f"  ... ({len(matches)} totalt, förfina sökningen)")
         return
 
-    stores = [s.strip().lower() for s in args.butiker.split(",") if s.strip()]
-    queries = [q.strip() for q in args.sok.split(",") if q.strip()]
+    result = jamfor(
+        sok=args.sok, butiker=args.butiker, marke=args.marke,
+        med_kampanj=args.med_kampanj, kuponger_path=args.kuponger,
+        max_sidor=args.max_sidor, jmf_pris=args.jmf_pris, visa_alla=args.visa_alla,
+        ica_butik=args.ica_butik, ica_id=args.ica_id, ica_http=args.ica_http,
+    )
 
-    coupons: List[Coupon] = []
-    if args.kuponger:
-        coupons = load_coupons(args.kuponger)
-
-
-    # Bestäm ICA-butik om ICA valts (priserna skiljer sig mellan butiker)
-    ica_account_id: Optional[str] = None
-    ica_store_name: str = ""
-    if "ica" in stores:
-        if args.ica_id:
-            ica_account_id = args.ica_id
-        elif args.ica_butik:
-            found = find_ica_store(args.ica_butik)
-            if found:
-                ica_account_id = found.get("accountId")
-                ica_store_name = found.get("name", "")
-            else:
-                print(f"⚠️  Hittade ingen ICA-butik som matchar '{args.ica_butik}'. "
-                      f"Använder första butiken i listan.", file=sys.stderr)
-        if not ica_account_id:
-            first = fetch_ica_stores()[0]
-            ica_account_id = first.get("accountId")
-            ica_store_name = first.get("name", "")
-        print(f"ℹ️  ICA-butik: {ica_store_name} (accountId {ica_account_id})", file=sys.stderr)
-
-    products: List[Product] = []
-    for store in stores:
-        for q in queries:
-            try:
-                if store == "willys":
-                    products.extend(fetch_willys(q))
-                elif store == "hemkop":
-                    products.extend(fetch_hemkop(q))
-                elif store == "apotea":
-                    products.extend(fetch_apotea(q, max_pages=args.max_sidor, fill_jmf=args.jmf_pris))
-                elif store == "coop":
-                    products.extend(fetch_coop(q))
-                elif store == "apoteket":
-                    products.extend(fetch_apoteket(q))
-                elif store == "mathem":
-                    products.extend(fetch_mathem(q))
-                elif store == "citygross":
-                    products.extend(fetch_citygross(q))
-                elif store == "ica":
-                    if ica_account_id:
-                        products.extend(fetch_ica(q, ica_account_id, prefer_browser=not args.ica_http))
-                else:
-                    print(f"⚠️  Okänd butik: {store} (stöds: willys, hemkop, apotea, coop, apoteket, mathem, citygross, ica)", file=sys.stderr)
-            except Exception as e:
-                print(f"⚠️  Kunde inte hämta från {store} ('{q}'): {e}", file=sys.stderr)
-
-    # Rensa dubbletter (samma butik + namn)
-    seen = set()
-    unique: List[Product] = []
-    for p in products:
-        key = (p.store, p.name.lower())
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(p)
-
-    # Filtrera: blöjor + märke
-    if not args.visa_alla:
-        unique = [p for p in unique if is_diaper(p.name)]
-    if args.marke:
-        wanted = args.marke.lower()
-        unique = [p for p in unique if wanted in p.brand.lower()]
-
-    # Räkna in butikernas kampanjpris (billigast möjliga, kräver att man uppfyller villkoren)
-    if args.med_kampanj:
-        for p in unique:
-            if p.kampanj_per is not None and p.price_per is not None and p.kampanj_per < p.price_per:
-                p.price_per = p.kampanj_per
-                if p.count:
-                    p.price = p.kampanj_per * p.count
-
-    # Tillämpa inmatade kuponger (filtrerar på märke/storlek och räknar rabatt)
-    if coupons:
-        for p in unique:
-            p.price_per = apply_coupons(p, coupons)
-
-    # Sortera på billigast kr/blöja (okända sist)
-    unique.sort(key=lambda p: (p.price_per is None, p.price_per if p.price_per is not None else 0))
+    unique = result["produkter"]
+    coupons = result["kuponger"]
+    queries = result["queries"]
+    stores = result["stores"]
+    for w in result["varningar"]:
+        print("⚠️  " + w, file=sys.stderr)
+    if result["ica_store_name"]:
+        print("ℹ️  ICA-butik: " + result["ica_store_name"], file=sys.stderr)
 
     # Utskrift
     print()
@@ -916,7 +944,7 @@ def main() -> None:
     if len(unique) > shown:
         print(f"... ({len(unique) - shown} fler, öka --topp för att se alla)")
 
-    campaign_products = [p for p in unique if p.kampanj]
+    campaign_products = result["kampanjer"]
     if campaign_products:
         print()
         if args.med_kampanj:
@@ -928,7 +956,7 @@ def main() -> None:
             per_txt = (" → " + format_kr(p.kampanj_per) + "/blöja") if p.kampanj_per is not None else ""
             print(f"  ★ {p.store}: {p.name} → {p.kampanj}{per_txt}")
 
-    without_price = [p for p in unique if p.price_per is None]
+    without_price = result["utan_pris"]
     if without_price:
         print()
         print(f"ℹ️  {len(without_price)} produkt(er) saknar antal/jämförpris och kunde inte "

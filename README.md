@@ -42,6 +42,28 @@ python3 blojkalkylatorn.py --butiker ica --ica-butik "maxi stockholm"
 
 Programmet sorterar alltid på **billigast kr/blöja** överst.
 
+## 🌐 Webbgränssnitt
+
+Det finns även ett webbgränssnitt som körs i webbläsaren:
+
+```bash
+# Installera Flask (engångs):
+pip3 install --user flask
+
+# Starta webbgränssnittet:
+python3 web.py
+```
+
+Öppna sedan **http://127.0.0.1:5000** i webbläsaren. Där kan du:
+
+- Välja sökord, märke (Libero/Pampers) och vilka butiker som ska sökas
+- Bocka i "räkna in kampanjpris" (billigast möjliga pris)
+- Bocka i "använd kuponger" (läser `kuponger.json`)
+- Se resultatet som en snygg tabell med billigaste priset markerat
+
+OBS: ICA är långsam i webbgränssnittet (webbläsare för bot-skydd), så den är
+avmarkerad som standard.
+
 ## ★ Riktiga kampanjer
 
 Programmet **hittar automatiskt** butikernas aktuella kampanjer direkt från
